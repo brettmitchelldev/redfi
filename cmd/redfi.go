@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/openfip/redfi"
+	"github.com/uglide/redfi"
 )
 
 var (
