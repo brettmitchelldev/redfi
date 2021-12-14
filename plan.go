@@ -148,15 +148,11 @@ func marshalCommand(cmd string) []byte {
 
 	var result []byte
 
-	result = append(result, []byte(fmt.Sprintf("*%d\r\n", len(cmdParts)))...)
+	result = append(result, []byte(fmt.Sprintf("*%d", len(cmdParts)))...)
 
-	for i, part := range cmdParts {
-		result = append(result, []byte(fmt.Sprintf("$%d\r\n", len(part)))...)
-		if i == 1 {
-			result = append(result, []byte(part)...)
-		} else {
-			result = append(result, []byte(fmt.Sprintf("%s\r\n", strings.ToUpper(part)))...)
-		}
+	for _, part := range cmdParts {
+		result = append(result, []byte(fmt.Sprintf("\r\n$%d\r\n", len(part)))...)
+		result = append(result, []byte(fmt.Sprintf("%s", part))...)
 	}
 
 	return result
