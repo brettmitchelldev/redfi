@@ -144,7 +144,22 @@ func (p *Plan) MarshalCommands() {
 }
 
 func marshalCommand(cmd string) []byte {
-	return []byte(fmt.Sprintf("\r\n%s\r\n", strings.ToUpper(cmd)))
+	cmdParts := strings.Split(cmd, " ")
+
+	var result []byte
+
+	result = append(result, []byte(fmt.Sprintf("*%d\r\n", len(cmdParts)))...)
+
+	for i, part := range cmdParts {
+		result = append(result, []byte(fmt.Sprintf("$%d\r\n", len(part)))...)
+		if i == 1 {
+			result = append(result, []byte(part)...)
+		} else {
+			result = append(result, []byte(fmt.Sprintf("%s\r\n", strings.ToUpper(part)))...)
+		}
+	}
+
+	return result
 }
 
 // SelectRule finds the first rule that applies to the given variables
