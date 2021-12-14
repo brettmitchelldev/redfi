@@ -47,6 +47,11 @@ func (c *Controller) parseRule(rule *Rule, buf string) error {
 
 	key := strings.ToLower(kv[0])
 	switch key {
+	case COMMAND:
+		if len(kv[1]) <= 0 {
+			return fmt.Errorf("command mustn't be empty")
+		}
+		rule.Command = kv[1]
 	case DELAY:
 		delay, err := strconv.Atoi(kv[1])
 		if err != nil {
