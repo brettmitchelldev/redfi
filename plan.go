@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -86,7 +86,7 @@ func Parse(planPath string) (*Plan, error) {
 		return nil, err
 	}
 
-	buf, err := ioutil.ReadAll(fd)
+	buf, err := io.ReadAll(fd)
 	if err != nil {
 		return nil, err
 	}
