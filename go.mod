@@ -1,4 +1,4 @@
-module github.com/uglide/redfi
+module github.com/brettmitchelldev/redfi
 
 go 1.12
 
