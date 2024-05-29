@@ -66,7 +66,7 @@ func New(planPath, server, addr string) (*Proxy, error) {
 	}, nil
 }
 
-func (p *Proxy) startAPI() {
+func (p *Proxy) StartAPI() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)

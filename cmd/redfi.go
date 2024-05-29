@@ -23,5 +23,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	go func() {
+		proxy.StartAPI()
+	}()
 	proxy.Start()
 }
