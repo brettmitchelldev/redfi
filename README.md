@@ -96,18 +96,32 @@ The HTTP controller API only modifies the plan in memory. Even if you are using 
 ### GET /rules
 
 Returns the list of all active rules:
+
 ```bash
 $ curl localhost:8081/rules
 {"ok":true,"rules":[{"name":"test"}]}
 ```
 
+### POST /rules
+
+Creates a new rule.
+
 ```bash
 $ curl \
    -X POST \
    -H 'Content-Type: application/json' \
-   -d '{"name": "test", "match": ["ping"]}' \
+   -d '{"name": "test", "rawMatch": ["ping"]}' \
    localhost:8081/rules
 
+{"ok":true,"rules":[{"name":"test","rawMatch":["ping"]}]}
+```
+
+### GET /rules/:ruleName
+
+Gets a single rule. Returns a response with the same array format as the list API.
+
+```bash
+$ curl localhost:8081/rules/test
 {"ok":true,"rules":[{"name":"test"}]}
 ```
 
@@ -122,6 +136,4 @@ $ curl \
 
 {"ok":true}
 ```
-
-
 
