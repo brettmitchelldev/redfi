@@ -1,4 +1,5 @@
-<img src="https://raw.githubusercontent.com/redfi/redfi/master/static/redfi@2x.png" width="400px">
+
+# redfi
 
 RedFI acts as a proxy between the client and Redis with the capability
 of injecting faults on the fly, based on the rules given by you.
@@ -6,62 +7,117 @@ of injecting faults on the fly, based on the rules given by you.
 ## Features
 - Simple to use. It is just a binary that you execute.
 - Transparent to the client.
-- Flexibility to inject failures on Redis Commands you define.
+- Apply failure injection on custom conditions
 - Limit failure injection to a percentage of the commands.
 - Limit failure injection to certain clients only.
-- Inject latency, drop connections, return empty responses.
-
-## Why?
-We believe that to gain trust in your system,
-you must test it against various scenarios of failures, before deploying it to production.  
-These tests should also be part of your CI, to catch code changes that might introduce regressions.  
-This would help you understand the limits of your system, and how resilient it is against Redis' failures.
+- Failure types:
+  - Latency
+  - Dropped connections
+  - Empty responses
 
 ## How it Works
-RedFI is a proxy that sets between the client and the actual Redis server. On every incoming command from the client, it checks the list of failure rules provided by you, and then it applies the first rule that matches the request.
+RedFI is a proxy that sits between the client and the actual Redis server. On every incoming command from the client, it checks the list of failure rules provided by you, and then it applies the first rule that matches the request.
+
+# This is a fork (of a fork)
+## Differences with upstream version
+
+- Support for Go modules
+    - From previous fork
+    - Required if you want to use a modern version of Go
+- Removed support for configuration from redis-cli (not sure why that was a thing)
+- Finished in-progress HTTP API
+    - API bind address is now configurable with `-api`
+    - Added a postman collection
+- Added support for raw byte-sequence matching in rules with `"rawMatch"`
 
 ## Usage
-First, download the [latest binary](https://github.com/redfi/redfi/releases/tag/v0.1).
+Make sure you have go installed. `mise` is a great tool for this: `mise use --global go@latest`
 
-After that, execute the binary we downloaded earlier
+Build: `go build github.com/brettmitchelldev/redfi/cmd`
+
+Run the resulting binary:
 ```bash
-$ ./redfi -addr 127.0.0.1:8083 -redis 127.0.0.1:6379
-
-RedFI is listening on 127.0.0.1:8083
-Don't forget to point your client to that address.
-
-RedFI Controller is listening on :6380
-```
-- **addr**: is the address on which the proxy listens on for new connections.
-- **redis**: address of the actual Redis server to proxy commands/connections to.
-- **plan**: path to the json file that contains the rules/scenarios for fault injection.
-
-An example of controlling the proxy rules
-[![asciicast](https://asciinema.org/a/CJyxhZXfk7aaGJ9qfU865Gcy6.png)](https://asciinema.org/a/CJyxhZXfk7aaGJ9qfU865Gcy6)
-
-## Config Commands
-
-Point redis-cli to RedFI Controller port
-```bash
-$ redi-cli -p 6380
+$ ./redfi -addr 127.0.0.1:6380 -redis 127.0.0.1:6379 -api 127.0.0.1:8081
+redis   127.0.0.1:6379
+proxy   127.0.0.1:6380
+control 127.0.0.1:8081
 ```
 
-### RULEADD rule_name option=value [option=value]
-Adds a rule to the engine of RedFI
+- **addr**: The address on which the proxy listens on for new connections.
+- **redis**: Address of the actual Redis server to proxy commands/connections to.
+- **plan**: Path to the json file that contains the rules/scenarios for fault injection.
+- **api**: The address used when binding the HTTP API
+- **log**: Designates log level. Use 'v' to see matching command names, and 'vv' to see matched commands and match counts. Leave unset for no silent.
 
-### Faults Options
-- `delay`: adds a delay, the value unit is milliseconds. Example: `delay=200`.
-- `return_empty`: returns an empty response. Example: `return_empty=true`.
-- `return_err`: returns an error response. Example: `return_err=ERR bad command.`
-- `drop`: drop connections, the value is a boolean. Example: `drop=true`.
+## Rules options
 
-### Blast limiters
-They limit the radius of the blast
-- `command`: only apply failure on certain commands. For example `command=HGET`.
-- `percentage`: limits how many times it applies the rule. For example `percentage=25` applies only to 25% of matching commands.
-- `client_addr`: scopes the radius to clients coming from a certain subnet,ip,ip:port. For example `client_addr=192.0.0.1`
+### "command"
+Matches on the command name. The value is serialized as RESP before matching against incoming requests.
 
-## Project Status
-RedFI is still in its early stages, so expect rapid changes.  
-Also, for now, we advise you to use the proxy in development and staging area only.  
-If you want to use it in production, you should limit the percentage of connections you send to the proxy.
+E.g. `"command": "set my-key foo"` is converted to `*3\n$3\nset\n$6\nmy-key\n$3\nfoo`
+
+Note that this is NOT a prefix match, nor is it a match on the exact command name.
+
+This is the matching mechanism implemented by the original, and it doesn't seem to be super useful. It may get removed in the future.
+
+### "rawMatch"
+More useful, `rawMatch` allows you to craft specific patterns to match against Redis requests.
+
+Keep in mind that Redis communicates using [RESP](https://redis.io/docs/latest/develop/reference/protocol-spec/), so if you want to match an exact command, you'll need to format it as a RESP snippet.
+
+For example, to match a `set` command, you could do something like: `*3\n$3\nset\n`, which will match any len-3 array whose first element is the exact command name `set`.
+
+### "client_addr"
+Limits the effect of a rule to a particular client. Applies as a prefix.
+
+### "percentage"
+Limits the effect of the rule to the approximate percentage of matched requests.
+
+### "delay"
+Waits to send the request to Redis for the given number of milliseconds.
+
+### "return_empty"
+Returns an empty response. In RESP, this is represented by a null bulk string: `$-1\r\n` (read, bulk string of length -1).
+
+### "return_err"
+Returns an error with the value of `return_err` as the message.
+
+### "drop"
+Closes the client connection.
+
+## HTTP Controller API
+
+The HTTP controller API only modifies the plan in memory. Even if you are using a plan file, changes made with the HTTP API will not be persisted to disk.
+
+### GET /rules
+
+Returns the list of all active rules:
+```bash
+$ curl localhost:8081/rules
+{"ok":true,"rules":[{"name":"test"}]}
+```
+
+```bash
+$ curl \
+   -X POST \
+   -H 'Content-Type: application/json' \
+   -d '{"name": "test", "match": ["ping"]}' \
+   localhost:8081/rules
+
+{"ok":true,"rules":[{"name":"test"}]}
+```
+
+### DELETE /rules/:ruleName
+
+Removes a rule from memory.
+
+```bash
+$ curl \
+    -X DELETE \
+    localhost:8081/rules/test
+
+{"ok":true}
+```
+
+
+
