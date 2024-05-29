@@ -20,6 +20,7 @@ type Proxy struct {
 	server   string
 	plan     *Plan
 	addr     string
+	apiAddr  string
 	connPool pool.Pool
 	api      *API
 }
@@ -42,7 +43,7 @@ func factory(server string) func() (net.Conn, error) {
 	}
 }
 
-func New(planPath, server, addr string) (*Proxy, error) {
+func New(planPath, server, addr, apiAddr string) (*Proxy, error) {
 	p, err := pool.NewChannelPool(5, 30, factory(server))
 	if err != nil {
 		return nil, err
@@ -63,6 +64,7 @@ func New(planPath, server, addr string) (*Proxy, error) {
 		plan:     plan,
 		addr:     addr,
 		api:      NewAPI(plan),
+		apiAddr:  apiAddr,
 	}, nil
 }
 
@@ -86,9 +88,8 @@ func (p *Proxy) StartAPI() {
 		})
 	})
 
-	// @TODO(kl): get api port from cli
-	fmt.Println("API is listening on :8081")
-	err := http.ListenAndServe(":8081", r)
+	fmt.Printf("control\t%s\n", p.apiAddr)
+	err := http.ListenAndServe(p.apiAddr, r)
 	if err != nil {
 		log.Fatal(err)
 	}
