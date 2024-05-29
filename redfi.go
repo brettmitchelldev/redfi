@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -26,21 +25,9 @@ type Proxy struct {
 	logging  string
 }
 
-func stripNewlines(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\r' || s[i] == '\n' {
-			s = strings.Replace(s, "\r", " ", -1)
-			s = strings.Replace(s, "\n", " ", -1)
-			break
-		}
-	}
-	return s
-}
-
 func factory(server string) func() (net.Conn, error) {
 	return func() (net.Conn, error) {
 		return net.Dial("tcp", server)
-
 	}
 }
 

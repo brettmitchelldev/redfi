@@ -24,11 +24,15 @@ RedFI is a proxy that sits between the client and the actual Redis server. On ev
 - Support for Go modules
     - From previous fork
     - Required if you want to use a modern version of Go
-- Removed support for configuration from redis-cli (not sure why that was a thing)
-- Finished in-progress HTTP API
-    - API bind address is now configurable with `-api`
-    - Added a postman collection
-- Added support for raw byte-sequence matching in rules with `"rawMatch"`
+- Removed support for configuration from redis-cli
+- Added support for response stream fault injection (original only supported request stream)
+- Added support for raw byte-sequence matching in rules with `rawMatchAll` and `rawMatchAny`
+- Added RESP awareness; rules are applied to individual RESP requests/responses (original applies them to the raw TCP stream)
+- Added a Containerfile for building a `redfi` image (no ci/cd or public image, for now, this is only to build from a local copy of the source)
+- Added support for logging:
+    - `log` directive on rules for debugging/designing fault plans
+    - Application logs for identifying issues in `redfi`
+- Removed support for pooled connections to the Redis server. This was causing proxy transparency issues in applications with a large number of connections to Redis.
 
 ## Usage
 Make sure you have go installed. `mise` is a great tool for this: `mise use --global go@latest`
