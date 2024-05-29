@@ -37,8 +37,9 @@ type Rule struct {
 	ReturnErr   string `json:"return_err,omitempty"`
 	Percentage  int    `json:"percentage,omitempty"`
 	// SelectRule does prefix matching on this value
-	ClientAddr string `json:"client_addr,omitempty"`
-	Command    string `json:"command,omitempty"`
+	ClientAddr string   `json:"client_addr,omitempty"`
+	Command    string   `json:"command,omitempty"`
+	RawMatch   []string `json:"rawMatch,omitempty"`
 	// filled by marshalCommand
 	marshaledCmd []byte
 	hits         uint64
@@ -158,31 +159,43 @@ func marshalCommand(cmd string) []byte {
 	return result
 }
 
+func pickRule(rules []*Rule, clientAddr string, buf []byte) *Rule {
+	for _, rule := range rules {
+		if len(rule.ClientAddr) > 0 && !strings.HasPrefix(clientAddr, rule.ClientAddr) {
+			return rule
+		}
+
+		if len(rule.Command) > 0 && bytes.Contains(buf, rule.marshaledCmd) {
+			return rule
+		}
+
+		if len(rule.RawMatch) > 0 {
+			for _, fragment := range rule.RawMatch {
+				if bytes.Contains(buf, []byte(fragment)) {
+					return rule
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // SelectRule finds the first rule that applies to the given variables
-func (p *Plan) SelectRule(clientAddr string, buf []byte) *Rule {
-	var chosenRule *Rule
-	for _, rule := range p.Rules {
-		if len(rule.ClientAddr) > 0 && strings.HasPrefix(clientAddr, rule.ClientAddr) {
-			continue
-		}
+func (p *Plan) SelectRule(clientAddr string, buf []byte, log Logger) *Rule {
+	rule := pickRule(p.Rules, clientAddr, buf)
 
-		if len(rule.Command) > 0 && !bytes.Contains(buf, rule.marshaledCmd) {
-			continue
-		}
-
-		chosenRule = rule
-		break
-
-	}
-	if chosenRule == nil {
+	if rule == nil {
 		return nil
 	}
 
-	if chosenRule.Percentage > 0 && rand.Intn(100) > chosenRule.Percentage {
+	if rule.Percentage > 0 && rand.Intn(100) > rule.Percentage {
+    log(1, fmt.Sprintf("skipped due to percentage setting\n", rule.Name))
 		return nil
 	}
-	atomic.AddUint64(&chosenRule.hits, 1)
-	return chosenRule
+
+  newHits := atomic.AddUint64(&rule.hits, 1)
+	return rule
 }
 
 // AddRule adds a rule to the current working plan
