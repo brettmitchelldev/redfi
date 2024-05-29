@@ -130,6 +130,7 @@ func writeResponse(rw http.ResponseWriter, r Response, status int) error {
 		return err
 	}
 
+  rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
 	_, err = rw.Write(out)
 	return err
