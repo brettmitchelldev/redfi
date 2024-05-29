@@ -30,7 +30,7 @@ type Plan struct {
 
 // Rule is what get's applied on every client message iff it matches it
 type Rule struct {
-	Name        string `json:"name,omiempty"`
+	Name        string `json:"name,omitempty"`
 	Delay       int    `json:"delay,omitempty"`
 	Drop        bool   `json:"drop,omitempty"`
 	ReturnEmpty bool   `json:"return_empty,omitempty"`
