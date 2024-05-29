@@ -23,6 +23,7 @@ type Proxy struct {
 	apiAddr  string
 	connPool pool.Pool
 	api      *API
+	logging  string
 }
 
 func stripNewlines(s string) string {
@@ -43,7 +44,7 @@ func factory(server string) func() (net.Conn, error) {
 	}
 }
 
-func New(planPath, server, addr, apiAddr string) (*Proxy, error) {
+func New(planPath, server, addr, apiAddr, logging string) (*Proxy, error) {
 	p, err := pool.NewChannelPool(5, 30, factory(server))
 	if err != nil {
 		return nil, err
@@ -65,6 +66,7 @@ func New(planPath, server, addr, apiAddr string) (*Proxy, error) {
 		addr:     addr,
 		api:      NewAPI(plan),
 		apiAddr:  apiAddr,
+		logging:  logging,
 	}, nil
 }
 
@@ -95,7 +97,7 @@ func (p *Proxy) StartAPI() {
 	}
 }
 
-func (p *Proxy) Start() error {
+func (p *Proxy) Start(logger Logger) error {
 	ln, err := net.Listen("tcp", p.addr)
 	if err != nil {
 		log.Fatal(err)
@@ -110,11 +112,11 @@ func (p *Proxy) Start() error {
 			log.Println(err)
 			continue
 		}
-		go p.handle(conn)
+		go p.handle(conn, logger)
 	}
 }
 
-func (p *Proxy) handle(conn net.Conn) {
+func (p *Proxy) handle(conn net.Conn, logger Logger) {
 	var wg sync.WaitGroup
 
 	targetConn, err := p.connPool.Get()
@@ -124,7 +126,7 @@ func (p *Proxy) handle(conn net.Conn) {
 
 	wg.Add(2)
 	go func() {
-		p.faulter(targetConn, conn)
+		p.faulter(targetConn, conn, logger)
 		wg.Done()
 	}()
 	go func() {
@@ -158,7 +160,7 @@ func (p *Proxy) pipe(dst, src net.Conn) {
 	}
 }
 
-func (p *Proxy) faulter(dst, src net.Conn) {
+func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 	buf := make([]byte, 32<<10)
 
 	for {
@@ -171,7 +173,7 @@ func (p *Proxy) faulter(dst, src net.Conn) {
 			continue
 		}
 
-		rule := p.plan.SelectRule(src.RemoteAddr().String(), buf)
+		rule := p.plan.SelectRule(src.RemoteAddr().String(), buf, logger)
 
 		if rule != nil {
 			if rule.Delay > 0 {

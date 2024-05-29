@@ -189,12 +189,16 @@ func (p *Plan) SelectRule(clientAddr string, buf []byte, log Logger) *Rule {
 		return nil
 	}
 
+  log(1, fmt.Sprintf("\n>>> Rule '%s' matched a command\n", rule.Name))
+  log(2, fmt.Sprintf("command = \"\n%s\n\"\n", string(buf)))
+
 	if rule.Percentage > 0 && rand.Intn(100) > rule.Percentage {
     log(1, fmt.Sprintf("skipped due to percentage setting\n", rule.Name))
 		return nil
 	}
 
   newHits := atomic.AddUint64(&rule.hits, 1)
+  log(2, fmt.Sprintf("times applied = %d\n", newHits))
 	return rule
 }
 

@@ -16,7 +16,7 @@ func TestSelectRule(t *testing.T) {
 		ClientAddr: "192.0.0.1:8001",
 	})
 
-	rule := p.SelectRule("192.0.0.1", []byte(""))
+	rule := p.SelectRule("192.0.0.1", []byte(""), MakeLogger(0))
 	if rule == nil {
 		t.Fatal("rule must not be nil")
 	}
@@ -29,12 +29,12 @@ func TestSelectRule(t *testing.T) {
 	})
 	p.MarshalCommands()
 
-	rule = p.SelectRule("192.0.0.1", []byte("\r\nGET\r\nfff"))
+	rule = p.SelectRule("192.0.0.1", []byte("\r\nGET\r\nfff"), MakeLogger(0))
 	if rule == nil {
 		t.Fatal("rule must not be nil")
 	}
 
-	rule = p.SelectRule("172.0.0.1", []byte("\r\nKEYS\r\nfff"))
+	rule = p.SelectRule("172.0.0.1", []byte("\r\nKEYS\r\nfff"), MakeLogger(0))
 	if rule != nil {
 		fmt.Println(rule)
 		t.Fatal("rule must BE nil")
