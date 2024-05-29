@@ -101,21 +101,8 @@ func (p *Proxy) Start() error {
 		log.Fatal(err)
 	}
 
-	fmt.Println("\nRedFI is listening on", p.addr)
-	fmt.Println("Don't forget to point your client to that address.")
-
-	ctr, err := newController(p.plan)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	go func() {
-		fmt.Println("\nRedFI Controller is listening on", configAddr)
-		err := ctr.Start()
-		if err != nil {
-			log.Fatal("encountered err while starting controller", err)
-		}
-	}()
+	fmt.Printf("redis\t%s\n", p.server)
+	fmt.Printf("proxy\t%s\n", p.addr)
 
 	for {
 		conn, err := ln.Accept()
