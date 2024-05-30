@@ -25,6 +25,10 @@ type Proxy struct {
 	logging  string
 }
 
+func (p *Proxy) Plan() *Plan {
+	return p.plan
+}
+
 func factory(server string) func() (net.Conn, error) {
 	return func() (net.Conn, error) {
 		return net.Dial("tcp", server)
