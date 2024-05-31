@@ -36,6 +36,7 @@ type Rule struct {
 	ReturnEmpty bool   `json:"return_empty,omitempty"`
 	ReturnErr   string `json:"return_err,omitempty"`
 	Percentage  int    `json:"percentage,omitempty"`
+	Log         bool   `json:"log,omitempty"`
 	// SelectRule does prefix matching on this value
 	ClientAddr string   `json:"client_addr,omitempty"`
 	Command    string   `json:"command,omitempty"`
@@ -159,8 +160,10 @@ func marshalCommand(cmd string) []byte {
 	return result
 }
 
-func pickRule(rules []*Rule, clientAddr string, buf []byte) *Rule {
+func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
 	for _, rule := range rules {
+		log(3, fmt.Sprintf("Checking rule %s", rule.Name))
+
 		if len(rule.ClientAddr) > 0 && !strings.HasPrefix(clientAddr, rule.ClientAddr) {
 			return rule
 		}
@@ -183,22 +186,31 @@ func pickRule(rules []*Rule, clientAddr string, buf []byte) *Rule {
 
 // SelectRule finds the first rule that applies to the given variables
 func (p *Plan) SelectRule(clientAddr string, buf []byte, log Logger) *Rule {
-	rule := pickRule(p.Rules, clientAddr, buf)
+	rule := pickRule(p.Rules, clientAddr, buf, log)
 
 	if rule == nil {
 		return nil
 	}
 
-  log(1, fmt.Sprintf("\n>>> Rule '%s' matched a command\n", rule.Name))
-  log(2, fmt.Sprintf("command = \"\n%s\n\"\n", string(buf)))
+	log(1, fmt.Sprintf("\n>>> Rule '%s' matched a command\n", rule.Name))
+	log(2, fmt.Sprintf("command = \"\n%s\n\"\n", string(buf)))
+
+	if rule.Log == true {
+		asBytes, err := json.Marshal(rule)
+		if err == nil {
+			log(0, fmt.Sprintf("matched rule: %s\n", string(asBytes)))
+		}
+		withoutNewlines := strings.ReplaceAll(string(buf), "\n", "\\n")
+		log(0, fmt.Sprintf("matched command: %s\n", withoutNewlines))
+	}
 
 	if rule.Percentage > 0 && rand.Intn(100) > rule.Percentage {
-    log(1, fmt.Sprintf("skipped due to percentage setting\n", rule.Name))
+		log(1, "skipped due to percentage setting\n")
 		return nil
 	}
 
-  newHits := atomic.AddUint64(&rule.hits, 1)
-  log(2, fmt.Sprintf("times applied = %d\n", newHits))
+	newHits := atomic.AddUint64(&rule.hits, 1)
+	log(2, fmt.Sprintf("times applied = %d\n", newHits))
 	return rule
 }
 
