@@ -38,9 +38,10 @@ type Rule struct {
 	Percentage  int    `json:"percentage,omitempty"`
 	Log         bool   `json:"log,omitempty"`
 	// SelectRule does prefix matching on this value
-	ClientAddr string   `json:"client_addr,omitempty"`
-	Command    string   `json:"command,omitempty"`
-	RawMatch   []string `json:"rawMatch,omitempty"`
+	ClientAddr  string   `json:"client_addr,omitempty"`
+	Command     string   `json:"command,omitempty"`
+	RawMatchAny []string `json:"rawMatchAny,omitempty"`
+	RawMatchAll []string `json:"rawMatchAll,omitempty"`
 	AlwaysMatch bool     `json:"alwaysMatch,omitempty"`
 	// filled by marshalCommand
 	marshaledCmd []byte
@@ -177,11 +178,21 @@ func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
 			return rule
 		}
 
-		if len(rule.RawMatch) > 0 {
-			for _, fragment := range rule.RawMatch {
+		if len(rule.RawMatchAny) > 0 {
+			for _, fragment := range rule.RawMatchAny {
 				if bytes.Contains(buf, []byte(fragment)) {
 					return rule
 				}
+			}
+		}
+
+		if len(rule.RawMatchAll) > 0 {
+			matchesAll := true
+			for _, fragment := range rule.RawMatchAll {
+				matchesAll = matchesAll && bytes.Contains(buf, []byte(fragment))
+			}
+			if matchesAll {
+				return rule
 			}
 		}
 	}
