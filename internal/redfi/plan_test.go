@@ -29,7 +29,7 @@ func TestSelectRule(t *testing.T) {
 	})
 	p.MarshalCommands()
 
-	rule = p.SelectRule("192.0.0.1", []byte("\r\nGET\r\nfff"), MakeLogger(0))
+	rule = p.SelectRule("192.0.0.1", []byte("*1\r\n$3\r\nGET\r\nfff"), MakeLogger(0))
 	if rule == nil {
 		t.Fatal("rule must not be nil")
 	}
