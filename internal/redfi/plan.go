@@ -41,6 +41,7 @@ type Rule struct {
 	ClientAddr string   `json:"client_addr,omitempty"`
 	Command    string   `json:"command,omitempty"`
 	RawMatch   []string `json:"rawMatch,omitempty"`
+	AlwaysMatch bool     `json:"alwaysMatch,omitempty"`
 	// filled by marshalCommand
 	marshaledCmd []byte
 	hits         uint64
@@ -163,6 +164,10 @@ func marshalCommand(cmd string) []byte {
 func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
 	for _, rule := range rules {
 		log(3, fmt.Sprintf("Checking rule %s", rule.Name))
+
+		if rule.AlwaysMatch == true {
+			return rule
+		}
 
 		if len(rule.ClientAddr) > 0 && !strings.HasPrefix(clientAddr, rule.ClientAddr) {
 			return rule
