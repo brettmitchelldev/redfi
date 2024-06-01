@@ -12,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode"
+
+	"github.com/tidwall/redcon"
 )
 
 var (
@@ -37,15 +40,15 @@ type Rule struct {
 	ReturnErr   string `json:"return_err,omitempty"`
 	Percentage  int    `json:"percentage,omitempty"`
 	Log         bool   `json:"log,omitempty"`
+
 	// SelectRule does prefix matching on this value
 	ClientAddr  string   `json:"client_addr,omitempty"`
 	Command     string   `json:"command,omitempty"`
 	RawMatchAny []string `json:"rawMatchAny,omitempty"`
 	RawMatchAll []string `json:"rawMatchAll,omitempty"`
 	AlwaysMatch bool     `json:"alwaysMatch,omitempty"`
-	// filled by marshalCommand
-	marshaledCmd []byte
-	hits         uint64
+
+	hits uint64
 }
 
 func (r Rule) String() string {
@@ -136,33 +139,7 @@ func (p *Plan) check() error {
 	return nil
 }
 
-func (p *Plan) MarshalCommands() {
-	for _, rule := range p.Rules {
-		if rule == nil {
-			continue
-		}
-		if len(rule.Command) > 0 {
-			rule.marshaledCmd = marshalCommand(rule.Command)
-		}
-	}
-}
-
-func marshalCommand(cmd string) []byte {
-	cmdParts := strings.Split(cmd, " ")
-
-	var result []byte
-
-	result = append(result, []byte(fmt.Sprintf("*%d", len(cmdParts)))...)
-
-	for _, part := range cmdParts {
-		result = append(result, []byte(fmt.Sprintf("\r\n$%d\r\n", len(part)))...)
-		result = append(result, []byte(fmt.Sprintf("%s", part))...)
-	}
-
-	return result
-}
-
-func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
+func pickRule(rules []*Rule, clientAddr string, msg redcon.RESP, log Logger) *Rule {
 	for _, rule := range rules {
 		log(3, fmt.Sprintf("Checking rule %s", rule.Name))
 
@@ -174,13 +151,23 @@ func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
 			return rule
 		}
 
-		if len(rule.Command) > 0 && bytes.Contains(buf, rule.marshaledCmd) {
-			return rule
+		if len(rule.Command) > 0 {
+			if msg.Type == redcon.Array {
+				commandMatches := false
+				msg.ForEach(func(r redcon.RESP) bool {
+					commandMatches = string(r.Data) == rule.Command
+					// Redis sends the command name as the first element in an array of bulk strings
+					return true
+				})
+				if commandMatches {
+					return rule
+				}
+			}
 		}
 
 		if len(rule.RawMatchAny) > 0 {
 			for _, fragment := range rule.RawMatchAny {
-				if bytes.Contains(buf, []byte(fragment)) {
+				if bytes.Contains(msg.Data, []byte(fragment)) {
 					return rule
 				}
 			}
@@ -189,7 +176,7 @@ func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
 		if len(rule.RawMatchAll) > 0 {
 			matchesAll := true
 			for _, fragment := range rule.RawMatchAll {
-				matchesAll = matchesAll && bytes.Contains(buf, []byte(fragment))
+				matchesAll = matchesAll && bytes.Contains(msg.Data, []byte(fragment))
 			}
 			if matchesAll {
 				return rule
@@ -200,24 +187,35 @@ func pickRule(rules []*Rule, clientAddr string, buf []byte, log Logger) *Rule {
 	return nil
 }
 
+func clean(s string) string {
+	return strings.Map(func(c rune) rune {
+		if c == '\n' || c == '\r' {
+			return c
+		}
+		if !unicode.IsPrint(c) && c > unicode.MaxASCII {
+			return -1
+		}
+		return c
+	}, s)
+}
+
 // SelectRule finds the first rule that applies to the given variables
-func (p *Plan) SelectRule(clientAddr string, buf []byte, log Logger) *Rule {
-	rule := pickRule(p.Rules, clientAddr, buf, log)
+func (p *Plan) SelectRule(clientAddr string, msg redcon.RESP, log Logger) *Rule {
+	rule := pickRule(p.Rules, clientAddr, msg, log)
 
 	if rule == nil {
 		return nil
 	}
 
 	log(1, fmt.Sprintf("\n>>> Rule '%s' matched a command\n", rule.Name))
-	log(2, fmt.Sprintf("command = \"\n%s\n\"\n", string(buf)))
+	log(2, fmt.Sprintf("command = \"\n%s\n\"\n", clean(string(msg.Data))))
 
 	if rule.Log == true {
 		asBytes, err := json.Marshal(rule)
 		if err == nil {
 			log(0, fmt.Sprintf("matched rule: %s\n", string(asBytes)))
 		}
-		withoutNewlines := strings.ReplaceAll(string(buf), "\n", "\\n")
-		log(0, fmt.Sprintf("matched command: %s\n", withoutNewlines))
+		log(0, fmt.Sprintf("matched command: %s\n", clean(string(msg.Data))))
 	}
 
 	if rule.Percentage > 0 && rand.Intn(100) > rule.Percentage {
@@ -238,10 +236,6 @@ func (p *Plan) AddRule(r Rule) error {
 
 	if len(r.Name) <= 0 {
 		return fmt.Errorf("Name of rule is required")
-	}
-
-	if len(r.Command) > 0 {
-		r.marshaledCmd = marshalCommand(r.Command)
 	}
 
 	p.m.Lock()

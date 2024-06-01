@@ -1,6 +1,7 @@
 package redfi
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -152,27 +153,41 @@ func (p *Proxy) pipe(dst, src net.Conn) {
 }
 
 func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
-	buf := make([]byte, 32<<10)
+	srcRd := bufio.NewReader(src)
 
 	for {
-		n, err := src.Read(buf)
-		if err != nil && err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println(err)
-			continue
+		var buf []byte
+    var msg redcon.RESP
+		// Read a complete RESP command and preserve any extra data (will be part of the next packet)
+		for {
+			line, err := srcRd.ReadBytes('\n')
+			if err != nil {
+				log.Println(err)
+				if err == io.EOF {
+					return
+				}
+			}
+
+			buf = append(buf, line...)
+			n, resp := redcon.ReadNextRESP(buf)
+			if n != 0 {
+				msg = resp
+				break
+			}
 		}
 
-		rule := p.plan.SelectRule(src.RemoteAddr().String(), buf, logger)
+		rule := p.plan.SelectRule(src.RemoteAddr().String(), msg, logger)
 
 		if rule != nil {
 			if rule.Delay > 0 {
+        logger(1, fmt.Sprintf("Delaying packet: rule = %s, delay = %dms\n", rule.Name, rule.Delay))
 				time.Sleep(time.Duration(rule.Delay) * time.Millisecond)
+        logger(1, fmt.Sprintf("Delay complete, sending message: rule = %s\n", rule.Name, rule.Delay))
 			}
 
 			if rule.Drop {
-				err = src.Close()
+        logger(1, fmt.Sprintf("Dropping connection with client: rule = %s", rule.Name))
+				err := src.Close()
 				if err != nil {
 					log.Println("encountered error while closing srcConn", err)
 				}
@@ -180,7 +195,8 @@ func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 			}
 
 			if rule.ReturnEmpty {
-				_, err = dst.Write([]byte("$-1\r\n"))
+        logger(1, fmt.Sprintf("Returning empty: rule = %s", rule.Name))
+				_, err := dst.Write([]byte("$-1\r\n"))
 				if err != nil {
 					log.Println(err)
 				}
@@ -188,9 +204,10 @@ func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 			}
 
 			if len(rule.ReturnErr) > 0 {
+        logger(1, fmt.Sprintf("Returning error: rule = %s, error = '%s'", rule.Name, rule.ReturnErr))
 				buf := []byte{}
 				buf = redcon.AppendError(buf, rule.ReturnErr)
-				_, err = dst.Write(buf)
+				_, err := dst.Write(buf)
 				if err != nil {
 					log.Println(err)
 				}
@@ -198,7 +215,7 @@ func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 			}
 		}
 
-		_, err = dst.Write(buf[:n])
+		_, err := dst.Write(msg.Raw)
 		if err != nil {
 			log.Println(err)
 			continue

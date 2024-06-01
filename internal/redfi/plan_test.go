@@ -28,7 +28,6 @@ func TestSelectRule(t *testing.T) {
 		Delay:   1e3,
 		Command: "GET",
 	})
-	p.MarshalCommands()
 
 	rule = p.SelectRule("192.0.0.1", []byte("*1\r\n$3\r\nGET\r\nfff"), MakeLogger(0))
 	if rule == nil {
