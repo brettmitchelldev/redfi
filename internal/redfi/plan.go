@@ -40,13 +40,13 @@ type Rule struct {
 	Name        string `json:"name,omitempty"`
 	Delay       int    `json:"delay,omitempty"`
 	Drop        bool   `json:"drop,omitempty"`
-	ReturnEmpty bool   `json:"return_empty,omitempty"`
-	ReturnErr   string `json:"return_err,omitempty"`
+	ReturnEmpty bool   `json:"returnEmpty,omitempty"`
+	ReturnErr   string `json:"returnErr,omitempty"`
 	Percentage  int    `json:"percentage,omitempty"`
 	Log         bool   `json:"log,omitempty"`
 
 	// SelectRule does prefix matching on this value
-	ClientAddr  string   `json:"client_addr,omitempty"`
+	ClientAddr  string   `json:"clientAddr,omitempty"`
 	ClientName  string   `json:"clientName,omitempty"`
 	Command     string   `json:"command,omitempty"`
 	RawMatchAny []string `json:"rawMatchAny,omitempty"`
@@ -71,13 +71,13 @@ func (r Rule) String() string {
 		buf = append(buf, fmt.Sprintf("drop=%t", r.Drop))
 	}
 	if r.ReturnEmpty {
-		buf = append(buf, fmt.Sprintf("return_empty=%t", r.ReturnEmpty))
+		buf = append(buf, fmt.Sprintf("returnEmpty=%t", r.ReturnEmpty))
 	}
 	if len(r.ReturnErr) > 0 {
-		buf = append(buf, fmt.Sprintf("return_err=%s", r.ReturnErr))
+		buf = append(buf, fmt.Sprintf("returnErr=%s", r.ReturnErr))
 	}
 	if len(r.ClientAddr) > 0 {
-		buf = append(buf, fmt.Sprintf("client_addr=%s", r.ClientAddr))
+		buf = append(buf, fmt.Sprintf("clientAddr=%s", r.ClientAddr))
 	}
 	if r.Percentage > 0 {
 		buf = append(buf, fmt.Sprintf("percentage=%d", r.Percentage))

@@ -71,7 +71,7 @@ Keep in mind that Redis communicates using [RESP](https://redis.io/docs/latest/d
 
 For example, to match a `set` command, you could do something like: `*3\n$3\nset\n`, which will match any len-3 array whose first element is the exact command name `set`.
 
-### "client_addr"
+### "clientAddr"
 Limits the effect of a rule to a particular client. Applies as a prefix.
 
 ### "percentage"
@@ -80,11 +80,11 @@ Limits the effect of the rule to the approximate percentage of matched requests.
 ### "delay"
 Waits to send the request to Redis for the given number of milliseconds.
 
-### "return_empty"
+### "returnEmpty"
 Returns an empty response. In RESP, this is represented by a null bulk string: `$-1\r\n` (read, bulk string of length -1).
 
-### "return_err"
-Returns an error with the value of `return_err` as the message.
+### "returnErr"
+Returns an error with the value of `returnErr` as the message.
 
 ### "drop"
 Closes the client connection.

@@ -30,7 +30,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"name\": \"NAME\",\n    \"client_addr\": \"CLIENT_ADDR\",\n    \"command\": \"COMMAND\",\n    \"rawMatch\": [\"RAW_MATCH\"],\n    \"percentage\": 50,\n    \"delay\": 1234,\n    \"drop\": false,\n    \"return_empty\": false,\n    \"return_err\": \"This is an error\"\n}",
+					"raw": "{\n    \"name\": \"NAME\",\n    \"clientAddr\": \"CLIENT_ADDR\",\n    \"command\": \"COMMAND\",\n    \"rawMatch\": [\"RAW_MATCH\"],\n    \"percentage\": 50,\n    \"delay\": 1234,\n    \"drop\": false,\n    \"returnEmpty\": false,\n    \"returnErr\": \"This is an error\"\n}",
 					"options": {
 						"raw": {
 							"language": "json"
