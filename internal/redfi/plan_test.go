@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/tidwall/redcon"
 )
 
 func TestSelectRule(t *testing.T) {
@@ -17,7 +19,8 @@ func TestSelectRule(t *testing.T) {
 		ClientAddr: "192.0.0.1:8001",
 	})
 
-	rule := p.SelectRule("192.0.0.1", []byte(""), MakeLogger(0))
+	_, resp := redcon.ReadNextRESP([]byte(""))
+	rule := p.SelectRule("192.0.0.1", resp, MakeLogger(0))
 	if rule == nil {
 		t.Fatal("rule must not be nil")
 	}
@@ -29,17 +32,24 @@ func TestSelectRule(t *testing.T) {
 		Command: "GET",
 	})
 
-	rule = p.SelectRule("192.0.0.1", []byte("*1\r\n$3\r\nGET\r\nfff"), MakeLogger(0))
+	_, resp = redcon.ReadNextRESP([]byte("*1\r\n$3\r\nGET\r\nfff"))
+	rule = p.SelectRule("192.0.0.1", resp, MakeLogger(0))
 	if rule == nil {
 		t.Fatal("rule must not be nil")
 	}
 
-	rule = p.SelectRule("172.0.0.1", []byte("\r\nKEYS\r\nfff"), MakeLogger(0))
+	_, resp = redcon.ReadNextRESP([]byte("\r\nKEYS\r\nfff"))
+	rule = p.SelectRule("172.0.0.1", resp, MakeLogger(0))
 	if rule != nil {
 		fmt.Println(rule)
 		t.Fatal("rule must BE nil")
 	}
+}
 
+func Resp(b []byte) redcon.RESP {
+	_, resp := redcon.ReadNextRESP(b)
+	fmt.Printf("%#v\n", resp)
+	return resp
 }
 
 func TestSelectRuleRawMatchAll(t *testing.T) {
@@ -47,7 +57,7 @@ func TestSelectRuleRawMatchAll(t *testing.T) {
 		name     string
 		plan     *Plan
 		addr     string
-		msg      []byte
+		msg      redcon.RESP
 		expected *Rule
 	}{
 		{
@@ -65,7 +75,7 @@ func TestSelectRuleRawMatchAll(t *testing.T) {
 				},
 			},
 			addr: "0.0.0.0",
-			msg:  []byte("asdfasdfasdf abc asdfasdfasdf 123 djdkfjdkfjDFJ"),
+			msg:  Resp([]byte("*4\r\n$3\r\nddd\r\n$3\r\nabc\r\n$3\r\nddd\r\n$3\r\n123\r\n")),
 			expected: &Rule{
 				Name:        "2",
 				RawMatchAll: []string{"123", "abc"},
@@ -87,8 +97,8 @@ func TestSelectRuleRawMatchAll(t *testing.T) {
 					},
 				},
 			},
-			addr: "0.0.0.0",
-			msg:  []byte("asdfasdfasdf 123 asdfasdfasdf"),
+			addr:     "0.0.0.0",
+			msg:      Resp([]byte("*4\r\n$3\r\nddd\r\n$3\r\nabc\r\n$3\r\nddd\r\n$3\r\naaa\r\n")),
 			expected: nil,
 		},
 
@@ -106,8 +116,8 @@ func TestSelectRuleRawMatchAll(t *testing.T) {
 					},
 				},
 			},
-			addr: "0.0.0.0",
-			msg:  []byte("asdfasdfasdf asdfasdfasdf"),
+			addr:     "0.0.0.0",
+			msg:      Resp([]byte("*4\r\n$3\r\nddd\r\n$3\r\naaa\r\n$3\r\nddd\r\n$3\r\na23\r\n")),
 			expected: nil,
 		},
 	}
@@ -130,7 +140,7 @@ func TestSelectRuleRawMatchAny(t *testing.T) {
 		name     string
 		plan     *Plan
 		addr     string
-		msg      []byte
+		msg      redcon.RESP
 		expected *Rule
 	}{
 		{
@@ -148,7 +158,7 @@ func TestSelectRuleRawMatchAny(t *testing.T) {
 				},
 			},
 			addr: "0.0.0.0",
-			msg:  []byte("asdfasdfasdf abc asdfasdfasdf"),
+			msg:  Resp([]byte("*4\r\n$3\r\nddd\r\n$3\r\nabc\r\n$3\r\nddd\r\n$3\r\naaa\r\n")),
 			expected: &Rule{
 				Name:        "2",
 				RawMatchAny: []string{"123", "abc"},
@@ -171,7 +181,7 @@ func TestSelectRuleRawMatchAny(t *testing.T) {
 				},
 			},
 			addr: "0.0.0.0",
-			msg:  []byte("asdfasdfasdf 123 asdfasdfasdf 321"),
+			msg:  Resp([]byte("*4\r\n$3\r\nddd\r\n$3\r\n321\r\n$3\r\nddd\r\n$3\r\n123\r\n")),
 			expected: &Rule{
 				Name:        "1",
 				RawMatchAny: []string{"321", "123"},
@@ -194,7 +204,7 @@ func TestSelectRuleRawMatchAny(t *testing.T) {
 				},
 			},
 			addr:     "0.0.0.0",
-			msg:      []byte("asdfasdfasdf xyz asdfasdfasdf"),
+			msg:      Resp([]byte("*4\r\n$3\r\naaa\r\n$3\r\nbbb\r\n$3\r\nccc\r\n$3\r\nddd\r\n")),
 			expected: (*Rule)(nil),
 		},
 	}
