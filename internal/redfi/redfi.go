@@ -182,7 +182,7 @@ func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 			if rule.Delay > 0 {
         logger(1, fmt.Sprintf("Delaying packet: rule = %s, delay = %dms\n", rule.Name, rule.Delay))
 				time.Sleep(time.Duration(rule.Delay) * time.Millisecond)
-        logger(1, fmt.Sprintf("Delay complete, sending message: rule = %s\n", rule.Name, rule.Delay))
+        logger(1, fmt.Sprintf("Delay complete, sending message: rule = %s\n", rule.Name))
 			}
 
 			if rule.Drop {
