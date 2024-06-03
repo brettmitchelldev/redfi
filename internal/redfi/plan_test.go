@@ -48,7 +48,6 @@ func TestSelectRule(t *testing.T) {
 
 func Resp(b []byte) redcon.RESP {
 	_, resp := redcon.ReadNextRESP(b)
-	fmt.Printf("%#v\n", resp)
 	return resp
 }
 

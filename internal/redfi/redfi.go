@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -135,7 +136,7 @@ func (p *Proxy) pipe(dst, src net.Conn) {
 
 	for {
 		n, err := src.Read(buf)
-		if err != nil && err == io.EOF {
+		if err != nil && (err == io.EOF || err == os.ErrClosed) {
 			break
 		}
 		if err != nil {
@@ -152,18 +153,60 @@ func (p *Proxy) pipe(dst, src net.Conn) {
 	}
 }
 
+func (p *Plan) handleRule(msg redcon.RESP, rule *Rule, src, dst net.Conn, logger Logger) {
+	if rule != nil {
+		if rule.Delay > 0 {
+			logger(1, fmt.Sprintf("Delaying packet: rule = %s, delay = %dms\n", rule.Name, rule.Delay))
+			time.Sleep(time.Duration(rule.Delay) * time.Millisecond)
+			logger(1, fmt.Sprintf("Delay complete, sending message: rule = %s\n", rule.Name))
+		}
+
+		if rule.Drop {
+			logger(1, fmt.Sprintf("Dropping connection with client: rule = %s", rule.Name))
+			err := src.Close()
+			if err != nil {
+				log.Println("encountered error while closing srcConn", err)
+			}
+			return
+		}
+
+		if rule.ReturnEmpty {
+			logger(1, fmt.Sprintf("Returning empty: rule = %s", rule.Name))
+			_, err := dst.Write([]byte("$-1\r\n"))
+			if err != nil {
+				log.Println(err)
+			}
+		}
+
+		if len(rule.ReturnErr) > 0 {
+			logger(1, fmt.Sprintf("Returning error: rule = %s, error = '%s'", rule.Name, rule.ReturnErr))
+			buf := []byte{}
+			buf = redcon.AppendError(buf, rule.ReturnErr)
+			_, err := dst.Write(buf)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}
+
+	_, err := dst.Write(msg.Raw)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
 func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 	srcRd := bufio.NewReader(src)
 
 	for {
 		var buf []byte
-    var msg redcon.RESP
+		var msg redcon.RESP
 		// Read a complete RESP command and preserve any extra data (will be part of the next packet)
 		for {
 			line, err := srcRd.ReadBytes('\n')
 			if err != nil {
 				log.Println(err)
-				if err == io.EOF {
+				if err == io.EOF || err == os.ErrClosed {
 					return
 				}
 			}
@@ -176,50 +219,14 @@ func (p *Proxy) faulter(dst, src net.Conn, logger Logger) {
 			}
 		}
 
-		rule := p.plan.SelectRule(src.RemoteAddr().String(), msg, logger)
+		clientAddr := src.RemoteAddr().String()
+		p.plan.handleClientSetName(clientAddr, msg)
+		rule := p.plan.SelectRule(clientAddr, msg, logger)
 
-		if rule != nil {
-			if rule.Delay > 0 {
-        logger(1, fmt.Sprintf("Delaying packet: rule = %s, delay = %dms\n", rule.Name, rule.Delay))
-				time.Sleep(time.Duration(rule.Delay) * time.Millisecond)
-        logger(1, fmt.Sprintf("Delay complete, sending message: rule = %s\n", rule.Name))
-			}
-
-			if rule.Drop {
-        logger(1, fmt.Sprintf("Dropping connection with client: rule = %s", rule.Name))
-				err := src.Close()
-				if err != nil {
-					log.Println("encountered error while closing srcConn", err)
-				}
-				break
-			}
-
-			if rule.ReturnEmpty {
-        logger(1, fmt.Sprintf("Returning empty: rule = %s", rule.Name))
-				_, err := dst.Write([]byte("$-1\r\n"))
-				if err != nil {
-					log.Println(err)
-				}
-				continue
-			}
-
-			if len(rule.ReturnErr) > 0 {
-        logger(1, fmt.Sprintf("Returning error: rule = %s, error = '%s'", rule.Name, rule.ReturnErr))
-				buf := []byte{}
-				buf = redcon.AppendError(buf, rule.ReturnErr)
-				_, err := dst.Write(buf)
-				if err != nil {
-					log.Println(err)
-				}
-				continue
-			}
+		if p.plan.MsgOrdering == "unordered" || (rule != nil && p.plan.MsgOrdering == "unordered-delays" && rule.Delay > 0) {
+			go p.plan.handleRule(msg, rule, src, dst, logger)
+		} else {
+			p.plan.handleRule(msg, rule, src, dst, logger)
 		}
-
-		_, err := dst.Write(msg.Raw)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
 	}
 }

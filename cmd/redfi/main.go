@@ -27,7 +27,8 @@ func main() {
 
 	logger := redfi.MakeLogger(len(*logging))
 
-  logger(0, fmt.Sprintf("Loaded %d rules from plan file\n", len(proxy.Plan().Rules)))
+	logger(0, fmt.Sprintf("Loaded %d rules from plan file\n", len(proxy.Plan().Rules)))
+	logger(0, fmt.Sprintf("Message ordering: %s\n", proxy.Plan().MsgOrdering))
 
 	go func() {
 		proxy.StartAPI()

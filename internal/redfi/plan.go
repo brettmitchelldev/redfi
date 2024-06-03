@@ -24,9 +24,13 @@ var (
 
 // Plan defines a set of rules to be applied by the proxy
 type Plan struct {
-	Rules []*Rule `json:"rules,omitempty"`
+	MsgOrdering string  `json:"msgOrdering,omitempty"`
+	Rules       []*Rule `json:"rules,omitempty"`
 	// a lookup table mapping rule name to index in the array
 	rulesMap map[string]int
+
+	// a lookup table mapping network addresses to known client names
+	clientNameMap map[string]string
 
 	m sync.RWMutex
 }
@@ -43,6 +47,7 @@ type Rule struct {
 
 	// SelectRule does prefix matching on this value
 	ClientAddr  string   `json:"client_addr,omitempty"`
+	ClientName  string   `json:"clientName,omitempty"`
 	Command     string   `json:"command,omitempty"`
 	RawMatchAny []string `json:"rawMatchAny,omitempty"`
 	RawMatchAll []string `json:"rawMatchAll,omitempty"`
@@ -99,7 +104,10 @@ func Parse(planPath string) (*Plan, error) {
 	}
 
 	// this is the plan we will use
-	plan := &Plan{rulesMap: map[string]int{}}
+	plan := &Plan{
+		rulesMap:      map[string]int{},
+		clientNameMap: map[string]string{},
+	}
 
 	// this is a draft of the plan
 	// we use to parse the json file,
@@ -109,6 +117,8 @@ func Parse(planPath string) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	plan.MsgOrdering = pd.MsgOrdering
 
 	for i, rule := range pd.Rules {
 		if rule == nil {
@@ -125,8 +135,9 @@ func Parse(planPath string) (*Plan, error) {
 
 func NewPlan() *Plan {
 	return &Plan{
-		Rules:    []*Rule{},
-		rulesMap: map[string]int{},
+		MsgOrdering: "ordered",
+		Rules:       []*Rule{},
+		rulesMap:    map[string]int{},
 	}
 }
 
@@ -139,48 +150,100 @@ func (p *Plan) check() error {
 	return nil
 }
 
-func pickRule(rules []*Rule, clientAddr string, msg redcon.RESP, log Logger) *Rule {
+func respArrToSlice(resp redcon.RESP) ([]redcon.RESP, error) {
+	if resp.Type != redcon.Array {
+		return nil, fmt.Errorf("RESP packet is not an Array")
+	}
+
+	out := make([]redcon.RESP, 0)
+	resp.ForEach(func(r redcon.RESP) bool {
+		out = append(out, r)
+		return true
+	})
+	return out, nil
+}
+
+func rlower(resp redcon.RESP) string {
+	return strings.ToLower(string(resp.Data))
+}
+
+func (p *Plan) handleClientSetName(clientAddr string, resp redcon.RESP) {
+	respSlice, err := respArrToSlice(resp)
+	if err != nil {
+		return
+	}
+
+	if len(respSlice) != 3 {
+		return
+	}
+
+	if rlower(respSlice[0]) != "client" || rlower(respSlice[1]) != "setname" {
+		return
+	}
+
+	p.m.Lock()
+	p.clientNameMap[clientAddr] = string(respSlice[2].Data)
+	p.m.Unlock()
+}
+
+func (p *Plan) pickRule(rules []*Rule, clientAddr string, msg redcon.RESP, log Logger) *Rule {
 	for _, rule := range rules {
-		log(3, fmt.Sprintf("Checking rule %s", rule.Name))
+		log(3, fmt.Sprintf("Checking rule: rule = %s, client = %s\n", rule.Name, clientAddr))
 
 		if rule.AlwaysMatch == true {
 			return rule
 		}
 
-		if len(rule.ClientAddr) > 0 && !strings.HasPrefix(clientAddr, rule.ClientAddr) {
-			return rule
+		hasClientName := len(rule.ClientName) > 0
+		hasClientAddr := len(rule.ClientAddr) > 0
+		hasCommand := len(rule.Command) > 0
+		hasRawMatchAny := len(rule.RawMatchAny) > 0
+		hasRawMatchAll := len(rule.RawMatchAll) > 0
+
+		matches := (hasClientName || hasClientAddr || hasCommand || hasRawMatchAny || hasRawMatchAll)
+
+		if hasClientName {
+			p.m.RLock()
+			clientName, ok := p.clientNameMap[clientAddr]
+			p.m.RUnlock()
+			matches = matches && ok && clientName == rule.ClientName
 		}
 
-		if len(rule.Command) > 0 {
-			if msg.Type == redcon.Array {
-				commandMatches := false
-				msg.ForEach(func(r redcon.RESP) bool {
-					commandMatches = string(r.Data) == rule.Command
-					// Redis sends the command name as the first element in an array of bulk strings
-					return true
-				})
-				if commandMatches {
-					return rule
-				}
+		if hasClientAddr {
+			matches = matches && !strings.HasPrefix(clientAddr, rule.ClientAddr)
+		}
+
+		if hasCommand {
+			if msg.Type != redcon.Array {
+				matches = false
+				continue
 			}
+			msg.ForEach(func(r redcon.RESP) bool {
+				matches = matches && string(r.Data) == rule.Command
+				// Redis sends the command name as the first element in an array of bulk strings
+				return false
+			})
 		}
 
-		if len(rule.RawMatchAny) > 0 {
+		if hasRawMatchAny {
+			hasAny := false
 			for _, fragment := range rule.RawMatchAny {
 				if bytes.Contains(msg.Data, []byte(fragment)) {
-					return rule
+					hasAny = true
+					break
 				}
+			}
+			matches = matches && hasAny
+		}
+
+		if hasRawMatchAll {
+			for _, fragment := range rule.RawMatchAll {
+				matches = matches && bytes.Contains(msg.Data, []byte(fragment))
 			}
 		}
 
-		if len(rule.RawMatchAll) > 0 {
-			matchesAll := true
-			for _, fragment := range rule.RawMatchAll {
-				matchesAll = matchesAll && bytes.Contains(msg.Data, []byte(fragment))
-			}
-			if matchesAll {
-				return rule
-			}
+		if matches {
+			return rule
 		}
 	}
 
@@ -201,20 +264,26 @@ func clean(s string) string {
 
 // SelectRule finds the first rule that applies to the given variables
 func (p *Plan) SelectRule(clientAddr string, msg redcon.RESP, log Logger) *Rule {
-	rule := pickRule(p.Rules, clientAddr, msg, log)
+	rule := p.pickRule(p.Rules, clientAddr, msg, log)
 
 	if rule == nil {
 		return nil
 	}
 
 	log(1, fmt.Sprintf("\n>>> Rule '%s' matched a command\n", rule.Name))
-	log(2, fmt.Sprintf("command = \"\n%s\n\"\n", clean(string(msg.Data))))
+	if rule.Log == false {
+		log(2, fmt.Sprintf("command = \"\n%s\n\"\n", clean(string(msg.Data))))
+	}
 
 	if rule.Log == true {
 		asBytes, err := json.Marshal(rule)
 		if err == nil {
 			log(0, fmt.Sprintf("matched rule: %s\n", string(asBytes)))
 		}
+		p.m.RLock()
+		clientName := p.clientNameMap[clientAddr]
+		p.m.RUnlock()
+		log(0, fmt.Sprintf("matched client: client addr = %s, client name = %s\n", clientAddr, clientName))
 		log(0, fmt.Sprintf("matched command: %s\n", clean(string(msg.Data))))
 	}
 
