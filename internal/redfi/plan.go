@@ -24,7 +24,7 @@ var (
 
 // Plan defines a set of rules to be applied by the proxy
 type Plan struct {
-	MsgOrdering   string  `json:"msgOrdering,omitempty"`
+	// MsgOrdering   string  `json:"msgOrdering,omitempty"`
 	RequestRules  []*Rule `json:"requestRules,omitempty"`
 	ResponseRules []*Rule `json:"responseRules,omitempty"`
 	// a lookup table mapping rule name to index in the array
@@ -130,7 +130,7 @@ func Parse(planPath string) (*Plan, error) {
 
 func NewPlan() *Plan {
 	return &Plan{
-		MsgOrdering:   "ordered",
+		// MsgOrdering:   "ordered",
 		RequestRules:  []*Rule{},
 		ResponseRules: []*Rule{},
 		rulesMap:      map[string]int{},

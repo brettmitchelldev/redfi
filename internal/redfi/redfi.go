@@ -21,10 +21,10 @@ import (
 
 type Proxy struct {
 	redisAddr string
-	plan			*Plan
-	addr			string
-	apiAddr	 string
-	connPool	pool.Pool
+	plan      *Plan
+	addr      string
+	apiAddr   string
+	connPool  pool.Pool
 	// api			 *API
 	logging string
 }
@@ -56,9 +56,9 @@ func New(planPath, redisAddr, addr, apiAddr, logging string) (*Proxy, error) {
 
 	return &Proxy{
 		redisAddr: redisAddr,
-		connPool:	p,
-		plan:			plan,
-		addr:			addr,
+		connPool:  p,
+		plan:      plan,
+		addr:      addr,
 		// api:			 NewAPI(plan),
 		apiAddr: apiAddr,
 		logging: logging,
@@ -229,11 +229,11 @@ func (p *Proxy) requestFaulter(dst, src net.Conn, logger Logger) {
 		p.plan.handleClientSetName(clientAddr, msg)
 		rule := p.plan.SelectRule("REQUEST", p.plan.RequestRules, clientAddr, msg, logger)
 
-		if p.plan.MsgOrdering == "unordered" || (rule != nil && p.plan.MsgOrdering == "unordered-delays" && rule.Delay > 0) {
-			go p.plan.handleRule("REQUEST", msg, rule, src, dst, logger)
-		} else {
-			p.plan.handleRule("REQUEST", msg, rule, src, dst, logger)
-		}
+		// if p.plan.MsgOrdering == "unordered" || (rule != nil && p.plan.MsgOrdering == "unordered-delays" && rule.Delay > 0) {
+		// 	go p.plan.handleRule("REQUEST", msg, rule, src, dst, logger)
+		// } else {
+		p.plan.handleRule("REQUEST", msg, rule, src, dst, logger)
+		// }
 	}
 }
 
@@ -265,10 +265,10 @@ func (p *Proxy) responseFaulter(dst, src net.Conn, logger Logger) {
 		p.plan.handleClientSetName(clientAddr, msg)
 		rule := p.plan.SelectRule("RESPONSE", p.plan.ResponseRules, clientAddr, msg, logger)
 
-		if p.plan.MsgOrdering == "unordered" || (rule != nil && p.plan.MsgOrdering == "unordered-delays" && rule.Delay > 0) {
-			go p.plan.handleRule("RESPONSE", msg, rule, src, dst, logger)
-		} else {
-			p.plan.handleRule("RESPONSE", msg, rule, src, dst, logger)
-		}
+		// if p.plan.MsgOrdering == "unordered" || (rule != nil && p.plan.MsgOrdering == "unordered-delays" && rule.Delay > 0) {
+		// 	go p.plan.handleRule("RESPONSE", msg, rule, src, dst, logger)
+		// } else {
+		p.plan.handleRule("RESPONSE", msg, rule, src, dst, logger)
+		// }
 	}
 }

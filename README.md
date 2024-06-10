@@ -34,13 +34,12 @@ Build: `go build github.com/brettmitchelldev/redfi/cmd`
 
 Run the resulting binary:
 ```bash
-$ ./redfi -addr 127.0.0.1:6380 -redis 127.0.0.1:6379 -api 127.0.0.1:8081
+$ ./redfi -addr 127.0.0.1:6380 -redis 127.0.0.1:6379
 redis   127.0.0.1:6379
 proxy   127.0.0.1:6380
-control 127.0.0.1:8081
 ```
 
-- **addr**: The address on which the proxy listens on for new connections.
+- **addr**: Proxy listen address. Real clients should connect to this address.
 - **redis**: Address of the actual Redis server to proxy commands/connections to.
 - **plan**: Path to the json file that contains the rules/scenarios for fault injection.
 - **log**: Designates log level. Use 'v' to see matching command names, and 'vv' to see matched commands and match counts. Leave unset for no silent.

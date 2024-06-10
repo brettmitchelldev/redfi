@@ -32,7 +32,7 @@ func main() {
     len(proxy.Plan().RequestRules)+len(proxy.Plan().ResponseRules),
   ))
 
-	logger(0, fmt.Sprintf("Message ordering: %s\n", proxy.Plan().MsgOrdering))
+	// logger(0, fmt.Sprintf("Message ordering: %s\n", proxy.Plan().MsgOrdering))
 
 	// go func() {
 	// 	proxy.StartAPI()
