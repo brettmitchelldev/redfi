@@ -24,8 +24,9 @@ var (
 
 // Plan defines a set of rules to be applied by the proxy
 type Plan struct {
-	MsgOrdering string  `json:"msgOrdering,omitempty"`
-	Rules       []*Rule `json:"rules,omitempty"`
+	MsgOrdering   string  `json:"msgOrdering,omitempty"`
+	RequestRules  []*Rule `json:"requestRules,omitempty"`
+	ResponseRules []*Rule `json:"responseRules,omitempty"`
 	// a lookup table mapping rule name to index in the array
 	rulesMap map[string]int
 
@@ -112,42 +113,28 @@ func Parse(planPath string) (*Plan, error) {
 	// this is a draft of the plan
 	// we use to parse the json file,
 	// then copy its rules to the real plan
-	pd := &Plan{}
-	err = json.Unmarshal(buf, pd)
+	err = json.Unmarshal(buf, plan)
 	if err != nil {
 		return nil, err
 	}
 
-	plan.MsgOrdering = pd.MsgOrdering
-
-	for i, rule := range pd.Rules {
-		if rule == nil {
-			continue
-		}
-		err := plan.AddRule(*rule)
-		if err != nil {
-			return plan, fmt.Errorf("encountered error when adding rule #%d: %s", i, err)
-		}
-	}
+	// for i, rule := range plan.RequestRules {
+	// 	err := plan.AddRuleMeta(*rule)
+	// 	if err != nil {
+	// 		return plan, fmt.Errorf("encountered error when adding rule #%d: %s", i, err)
+	// 	}
+	// }
 
 	return plan, nil
 }
 
 func NewPlan() *Plan {
 	return &Plan{
-		MsgOrdering: "ordered",
-		Rules:       []*Rule{},
-		rulesMap:    map[string]int{},
+		MsgOrdering:   "ordered",
+		RequestRules:  []*Rule{},
+		ResponseRules: []*Rule{},
+		rulesMap:      map[string]int{},
 	}
-}
-
-func (p *Plan) check() error {
-	for idx, rule := range p.Rules {
-		if rule.Percentage < 0 || rule.Percentage > 100 {
-			return fmt.Errorf("Percentage in rule #%d is malformed. it must within 0-100", idx)
-		}
-	}
-	return nil
 }
 
 func respArrToSlice(resp redcon.RESP) ([]redcon.RESP, error) {
@@ -263,14 +250,14 @@ func clean(s string) string {
 }
 
 // SelectRule finds the first rule that applies to the given variables
-func (p *Plan) SelectRule(clientAddr string, msg redcon.RESP, log Logger) *Rule {
-	rule := p.pickRule(p.Rules, clientAddr, msg, log)
+func (p *Plan) SelectRule(streamType string, rules []*Rule, clientAddr string, msg redcon.RESP, log Logger) *Rule {
+	rule := p.pickRule(rules, clientAddr, msg, log)
 
 	if rule == nil {
 		return nil
 	}
 
-	log(1, fmt.Sprintf("\n>>> Rule '%s' matched a command\n", rule.Name))
+  log(1, fmt.Sprintf("\n>>> %s :: Rule '%s' matched a command\n", streamType, rule.Name))
 	if rule.Log == false {
 		log(2, fmt.Sprintf("command = \"\n%s\n\"\n", clean(string(msg.Data))))
 	}
@@ -297,68 +284,69 @@ func (p *Plan) SelectRule(clientAddr string, msg redcon.RESP, log Logger) *Rule 
 	return rule
 }
 
-// AddRule adds a rule to the current working plan
-func (p *Plan) AddRule(r Rule) error {
-	if r.Percentage < 0 || r.Percentage > 100 {
-		return fmt.Errorf("Percentage in rule #%s is malformed. it must within 0-100", r.Name)
-	}
-
-	if len(r.Name) <= 0 {
-		return fmt.Errorf("Name of rule is required")
-	}
-
-	p.m.Lock()
-	defer p.m.Unlock()
-	if _, ok := p.rulesMap[r.Name]; ok {
-		return fmt.Errorf("a rule by the same name exists")
-	}
-
-	p.Rules = append(p.Rules, &r)
-	p.rulesMap[r.Name] = len(p.Rules) - 1
-
-	return nil
-}
-
-// DeleteRule deletes the given ruleName if found
-// otherwise it returns ErrNotFound
-func (p *Plan) DeleteRule(name string) error {
-	p.m.Lock()
-	defer p.m.Unlock()
-
-	idx, ok := p.rulesMap[name]
-	if !ok {
-		return ErrNotFound
-	}
-
-	p.Rules = append(p.Rules[:idx], p.Rules[idx+1:]...)
-	delete(p.rulesMap, name)
-
-	return nil
-}
-
-// GetRule returns the rule that matches the given name
-func (p *Plan) GetRule(name string) (Rule, error) {
-	p.m.RLock()
-	defer p.m.RUnlock()
-
-	idx, ok := p.rulesMap[name]
-	if !ok {
-		return Rule{}, ErrNotFound
-	}
-
-	return *p.Rules[idx], nil
-}
-
-// ListRules returns a slice of all the existing rules
-// the slice will be empty if Plan has no rules
-func (p *Plan) ListRules() []Rule {
-	p.m.RLock()
-	defer p.m.RUnlock()
-
-	rules := []Rule{}
-	for _, rule := range p.Rules {
-		rules = append(rules, *rule)
-	}
-
-	return rules
-}
+// // AddRuleMeta adds a rule to the current working plan
+// func (p *Plan) AddRuleMeta(kind string, r Rule) error {
+//   if r.Percentage < 0 || r.Percentage > 100 {
+//   	return fmt.Errorf("Percentage in rule #%s is malformed. it must within 0-100", r.Name)
+//   }
+//
+//   if len(r.Name) <= 0 {
+//   	return fmt.Errorf("Name of rule is required")
+//   }
+//
+//   p.m.Lock()
+//   defer p.m.Unlock()
+//   if _, ok := p.rulesMap[kind+r.Name]; ok {
+//   	return fmt.Errorf("a rule by the same name exists")
+//   }
+//   
+//   p.rulesMap[kind+r.Name] = len(p.RequestRules) - 1
+//
+//   return nil
+// }
+//
+// // TODO: Update HTTP API to distinguish between request and response rules
+//
+// // DeleteRule deletes the given ruleName if found
+// // otherwise it returns ErrNotFound
+// func (p *Plan) DeleteRule(name string) error {
+// 	p.m.Lock()
+// 	defer p.m.Unlock()
+//
+// 	idx, ok := p.rulesMap[name]
+// 	if !ok {
+// 		return ErrNotFound
+// 	}
+//
+// 	p.RequestRules = append(p.RequestRules[:idx], p.RequestRules[idx+1:]...)
+// 	delete(p.rulesMap, name)
+//
+// 	return nil
+// }
+//
+// // GetRule returns the rule that matches the given name
+// func (p *Plan) GetRule(name string) (Rule, error) {
+// 	p.m.RLock()
+// 	defer p.m.RUnlock()
+//
+// 	idx, ok := p.rulesMap[name]
+// 	if !ok {
+// 		return Rule{}, ErrNotFound
+// 	}
+//
+// 	return *p.RequestRules[idx], nil
+// }
+//
+// // ListRules returns a slice of all the existing rules
+// // the slice will be empty if Plan has no rules
+// func (p *Plan) ListRules() []Rule {
+// 	p.m.RLock()
+// 	defer p.m.RUnlock()
+//
+// 	rules := []Rule{}
+// 	for _, rule := range p.RequestRules {
+// 		rules = append(rules, *rule)
+// 	}
+//
+// 	return rules
+// }

@@ -25,14 +25,7 @@ RedFI is a proxy that sits between the client and the actual Redis server. On ev
     - From previous fork
     - Required if you want to use a modern version of Go
 - Removed support for configuration from redis-cli
-- Added support for response stream fault injection (original only supported request stream)
-- Added support for raw byte-sequence matching in rules with `rawMatchAll` and `rawMatchAny`
-- Added RESP awareness; rules are applied to individual RESP requests/responses (original applies them to the raw TCP stream)
-- Added a Containerfile for building a `redfi` image (no ci/cd or public image, for now, this is only to build from a local copy of the source)
-- Added support for logging:
-    - `log` directive on rules for debugging/designing fault plans
-    - Application logs for identifying issues in `redfi`
-- Removed support for pooled connections to the Redis server. This was causing proxy transparency issues in applications with a large number of connections to Redis.
+- Added support for raw byte-sequence matching in rules with `"rawMatch"`
 
 ## Usage
 Make sure you have go installed. `mise` is a great tool for this: `mise use --global go@latest`
@@ -50,7 +43,6 @@ control 127.0.0.1:8081
 - **addr**: The address on which the proxy listens on for new connections.
 - **redis**: Address of the actual Redis server to proxy commands/connections to.
 - **plan**: Path to the json file that contains the rules/scenarios for fault injection.
-- **api**: The address used when binding the HTTP API
 - **log**: Designates log level. Use 'v' to see matching command names, and 'vv' to see matched commands and match counts. Leave unset for no silent.
 
 ## Rules options
@@ -88,52 +80,4 @@ Returns an error with the value of `returnErr` as the message.
 
 ### "drop"
 Closes the client connection.
-
-## HTTP Controller API
-
-The HTTP controller API only modifies the plan in memory. Even if you are using a plan file, changes made with the HTTP API will not be persisted to disk.
-
-### GET /rules
-
-Returns the list of all active rules:
-
-```bash
-$ curl localhost:8081/rules
-{"ok":true,"rules":[{"name":"test"}]}
-```
-
-### POST /rules
-
-Creates a new rule.
-
-```bash
-$ curl \
-   -X POST \
-   -H 'Content-Type: application/json' \
-   -d '{"name": "test", "rawMatch": ["ping"]}' \
-   localhost:8081/rules
-
-{"ok":true,"rules":[{"name":"test","rawMatch":["ping"]}]}
-```
-
-### GET /rules/:ruleName
-
-Gets a single rule. Returns a response with the same array format as the list API.
-
-```bash
-$ curl localhost:8081/rules/test
-{"ok":true,"rules":[{"name":"test"}]}
-```
-
-### DELETE /rules/:ruleName
-
-Removes a rule from memory.
-
-```bash
-$ curl \
-    -X DELETE \
-    localhost:8081/rules/test
-
-{"ok":true}
-```
 
