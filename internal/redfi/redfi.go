@@ -114,7 +114,8 @@ func (p *Proxy) Start(logger Logger) error {
 func (p *Proxy) handle(conn net.Conn, logger Logger) {
 	var wg sync.WaitGroup
 
-	targetConn, err := p.connPool.Get()
+	// targetConn, err := p.connPool.Get()
+	targetConn, err := net.Dial("tcp", p.redisAddr)
 	if err != nil {
 		log.Fatal("failed to get a connection from connPool")
 	}
