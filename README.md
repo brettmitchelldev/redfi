@@ -14,6 +14,7 @@ of injecting faults on the fly, based on the rules given by you.
   - Latency
   - Dropped connections
   - Empty responses
+- Apply faults to either the request on the way out to the server, or the response on the way back to the client.
 
 ## How it Works
 RedFI is a proxy that sits between the client and the actual Redis server. On every incoming command from the client, it checks the list of failure rules provided by you, and then it applies the first rule that matches the request.
@@ -25,10 +26,17 @@ RedFI is a proxy that sits between the client and the actual Redis server. On ev
     - From previous fork
     - Required if you want to use a modern version of Go
 - Removed support for configuration from redis-cli
-- Added support for raw byte-sequence matching in rules with `"rawMatch"`
+- Added support for response stream fault injection (original only supported request stream)
+- Added support for raw byte-sequence matching in rules with `rawMatchAll` and `rawMatchAny`
+- Added RESP awareness; rules are applied to individual RESP requests/responses (original applies them to the raw TCP stream)
+- Added a Containerfile for building a `redfi` image (no ci/cd or public image, for now, this is only to build from a local copy of the source)
+- Added support for logging:
+    - `log` directive on rules for debugging/designing fault plans
+    - Application logs for identifying issues in `redfi`
+- Removed support for pooled connections to the Redis server. This was causing proxy transparency issues in applications with a large number of connections to Redis.
 
 ## Usage
-Make sure you have go installed. `mise` is a great tool for this: `mise use --global go@latest`
+Make sure you have go installed. [`mise`](https://github.com/jdx/mise) is a great tool for this: `mise use --global go@latest`
 
 Build: `go build github.com/brettmitchelldev/redfi/cmd`
 
@@ -44,39 +52,53 @@ proxy   127.0.0.1:6380
 - **plan**: Path to the json file that contains the rules/scenarios for fault injection.
 - **log**: Designates log level. Use 'v' to see matching command names, and 'vv' to see matched commands and match counts. Leave unset for no silent.
 
-## Rules options
+## Plan configuration
 
-### "command"
-Matches on the command name. The value is serialized as RESP before matching against incoming requests.
+A `redfi` fault plan is a JSON file with the following properties:
+- `requestRules`: Rule definitions applied to the request stream going from the client to the server
+- `responseRules`: Rule definitions applied to the response stream going from the server to the client
 
-E.g. `"command": "set my-key foo"` is converted to `*3\n$3\nset\n$6\nmy-key\n$3\nfoo`
+## Common rule options (request or reply)
 
-Note that this is NOT a prefix match, nor is it a match on the exact command name.
+### Match directives
+#### "command"
+Matches on the command name. Note that `"command": "set"` is _not_ the same as `"rawMatchAll": ["set"]`.
 
-This is the matching mechanism implemented by the original, and it doesn't seem to be super useful. It may get removed in the future.
+#### "rawMatchAny" / "rawMatchAll"
+More useful, `rawMatchAny` and `rawMatchAll` allow you to craft specific patterns to match against Redis requests.
 
-### "rawMatch"
-More useful, `rawMatch` allows you to craft specific patterns to match against Redis requests.
+As the names imply:
+- `rawMatchAny` matches if at least one of its array members is found in a message
+- `rawMatchAll` matches only if every one of its array members is found in a message
 
 Keep in mind that Redis communicates using [RESP](https://redis.io/docs/latest/develop/reference/protocol-spec/), so if you want to match an exact command, you'll need to format it as a RESP snippet.
 
 For example, to match a `set` command, you could do something like: `*3\n$3\nset\n`, which will match any len-3 array whose first element is the exact command name `set`.
 
-### "clientAddr"
-Limits the effect of a rule to a particular client. Applies as a prefix.
+#### "clientAddr"
+Limits the effect of a rule to a particular client, identifying the client by address. Applies as a prefix.
 
-### "percentage"
+#### "clientName"
+Limits the effect of a rule to a particular client by the value given to `CLIENT SETNAME`. Applies as an exact match. Rejects clients which have not set a client name.
+
+#### "percentage"
 Limits the effect of the rule to the approximate percentage of matched requests.
 
-### "delay"
-Waits to send the request to Redis for the given number of milliseconds.
+### Action directives
 
-### "returnEmpty"
+#### "delay"
+Waits to proxy the message for the given number of milliseconds.
+
+## Request-only rule options
+
+### Action directives
+
+#### "returnEmpty"
 Returns an empty response. In RESP, this is represented by a null bulk string: `$-1\r\n` (read, bulk string of length -1).
 
-### "returnErr"
+#### "returnErr"
 Returns an error with the value of `returnErr` as the message.
 
-### "drop"
+#### "drop"
 Closes the client connection.
 

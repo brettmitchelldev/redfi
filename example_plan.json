@@ -1,5 +1,5 @@
 {
-  "rules": [
+  "requestRules": [
     {
       "name": "delay_ping_1000",
       "delay": 1000,
@@ -9,7 +9,7 @@
     {
       "name": "delay_any_containing_foo_or_bar_1000",
       "delay": 1000,
-      "rawMatch": ["foo", "bar"]
+      "rawMatchAny": ["foo", "bar"]
     },
     {
       "name": "delay_set_my-key_1000",
