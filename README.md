@@ -35,18 +35,35 @@ RedFI is a proxy that sits between the client and the actual Redis server. On ev
     - Application logs for identifying issues in `redfi`
 - Removed support for pooled connections to the Redis server. This was causing proxy transparency issues in applications with a large number of connections to Redis.
 
-## Usage
-Make sure you have go installed. [`mise`](https://github.com/jdx/mise) is a great tool for this: `mise use --global go@latest`
+## Build
 
-Build: `go build github.com/brettmitchelldev/redfi/cmd`
+Make sure you have either `go` or `docker` installed.
+- [`mise`](https://github.com/jdx/mise) is a great tool for managing language installations of all kinds: `mise use --global go@latest`
 
-Run the resulting binary:
-```bash
-$ ./redfi -listen 127.0.0.1:6380 -redis 127.0.0.1:6379
-redis 127.0.0.1:6379
-proxy 127.0.0.1:6380
+### Using `go`
+
+Build the command using `go` and run the resulting binary:
+```sh
+$ go build ./cmd/redfi
+$ ./redfi
 ```
 
+### Using `docker`
+
+Build and run `redfi` as an image using the included `Containerfile`:
+```sh
+$ docker build -t redfi -f ./Containerfile .
+$ docker run -d -v `pwd`/example_plan.json:/etc/redfi.json -p 6380:6380 redfi -redis=my-redis-container:6379 -listen=0.0.0.0:6380
+f6d17d7347ffe271f5660b810d27090dbcb8b86b83c4fcd9c372aad3300cda06
+$ redis-cli -p 6380
+127.0.0.1:6380> ping
+PONG
+127.0.0.1:6380>
+```
+
+## Usage
+
+`redfi` supports the following CLI parameters:
 - **listen**: Proxy listen address. Real clients should connect to this address.
 - **redis**: Address of the actual Redis server to proxy commands/connections to.
 - **plan**: Path to the json file that contains the rules/scenarios for fault injection.
@@ -54,7 +71,7 @@ proxy 127.0.0.1:6380
 
 ## Plan configuration
 
-A `redfi` fault plan is a JSON file with the following properties:
+A `redfi` fault plan is a JSON file with one or both the following properties:
 - `requestRules`: Rule definitions applied to the request stream going from the client to the server
 - `responseRules`: Rule definitions applied to the response stream going from the server to the client
 
