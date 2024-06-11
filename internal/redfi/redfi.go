@@ -16,7 +16,6 @@ import (
 	// "github.com/go-chi/chi/middleware"
 
 	"github.com/tidwall/redcon"
-	pool "gopkg.in/fatih/pool.v2"
 )
 
 type Proxy struct {
@@ -24,7 +23,6 @@ type Proxy struct {
 	plan      *Plan
 	listen    string
 	// apiAddr   string
-	connPool pool.Pool
 	// api			 *API
 	logging string
 }
@@ -46,15 +44,11 @@ func New(
 	// apiAddr string,
 	logging string,
 ) (*Proxy, error) {
-	p, err := pool.NewChannelPool(5, 30, factory(redisAddr))
-	if err != nil {
-		return nil, err
-	}
-
 	plan := NewPlan()
 	if len(planPath) > 0 {
 		// parse the failures plan
-		plan, err = Parse(planPath)
+    var err error
+    plan, err = Parse(planPath)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +56,6 @@ func New(
 
 	return &Proxy{
 		redisAddr: redisAddr,
-		connPool:  p,
 		plan:      plan,
 		listen:    listen,
 		// api:			 NewAPI(plan),
@@ -120,10 +113,11 @@ func (p *Proxy) Start(logger Logger) error {
 func (p *Proxy) handle(conn net.Conn, logger Logger) {
 	var wg sync.WaitGroup
 
-	// targetConn, err := p.connPool.Get()
 	targetConn, err := net.Dial("tcp", p.redisAddr)
 	if err != nil {
-		log.Fatal("failed to get a connection from connPool")
+		log.Println("failed to connect to redis")
+    conn.Close()
+    return
 	}
 
 	wg.Add(2)
