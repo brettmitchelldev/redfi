@@ -22,9 +22,9 @@ import (
 type Proxy struct {
 	redisAddr string
 	plan      *Plan
-	addr      string
-	apiAddr   string
-	connPool  pool.Pool
+	listen    string
+	// apiAddr   string
+	connPool pool.Pool
 	// api			 *API
 	logging string
 }
@@ -39,7 +39,13 @@ func factory(server string) func() (net.Conn, error) {
 	}
 }
 
-func New(planPath, redisAddr, addr, apiAddr, logging string) (*Proxy, error) {
+func New(
+	planPath string,
+	redisAddr string,
+	listen string,
+	// apiAddr string,
+	logging string,
+) (*Proxy, error) {
 	p, err := pool.NewChannelPool(5, 30, factory(redisAddr))
 	if err != nil {
 		return nil, err
@@ -58,9 +64,9 @@ func New(planPath, redisAddr, addr, apiAddr, logging string) (*Proxy, error) {
 		redisAddr: redisAddr,
 		connPool:  p,
 		plan:      plan,
-		addr:      addr,
+		listen:    listen,
 		// api:			 NewAPI(plan),
-		apiAddr: apiAddr,
+		// apiAddr: apiAddr,
 		logging: logging,
 	}, nil
 }
@@ -93,13 +99,13 @@ func New(planPath, redisAddr, addr, apiAddr, logging string) (*Proxy, error) {
 // }
 
 func (p *Proxy) Start(logger Logger) error {
-	ln, err := net.Listen("tcp", p.addr)
+	ln, err := net.Listen("tcp", p.listen)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("redis	 %s\n", p.redisAddr)
-	fmt.Printf("proxy	 %s\n", p.addr)
+	fmt.Printf("redis %s\n", p.redisAddr)
+	fmt.Printf("proxy %s\n", p.listen)
 
 	for {
 		conn, err := ln.Accept()
