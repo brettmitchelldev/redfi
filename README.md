@@ -50,7 +50,7 @@ proxy   127.0.0.1:6380
 - **addr**: Proxy listen address. Real clients should connect to this address.
 - **redis**: Address of the actual Redis server to proxy commands/connections to.
 - **plan**: Path to the json file that contains the rules/scenarios for fault injection.
-- **log**: Designates log level. Use 'v' to see matching command names, and 'vv' to see matched commands and match counts. Leave unset for no silent.
+- **log**: Designates log level. Use 'v' to see matching command names, and 'vv' to see matched commands and match counts. Leave unset for silent.
 
 ## Plan configuration
 
@@ -58,47 +58,53 @@ A `redfi` fault plan is a JSON file with the following properties:
 - `requestRules`: Rule definitions applied to the request stream going from the client to the server
 - `responseRules`: Rule definitions applied to the response stream going from the server to the client
 
-## Common rule options (request or reply)
+## Rule directives (request or reply)
 
 ### Match directives
-#### "command"
+Match directives apply using a logical "and"; all match directives on a rule must succeed for the rule to match the given message.
+
+#### `command`
 Matches on the command name. Note that `"command": "set"` is _not_ the same as `"rawMatchAll": ["set"]`.
 
-#### "rawMatchAny" / "rawMatchAll"
-More useful, `rawMatchAny` and `rawMatchAll` allow you to craft specific patterns to match against Redis requests.
+The `command` example limits itself to matching exact command names only, whereas the `rawMatchAll` example will match even if `set` is found in the command arguments.
+
+#### `rawMatchAny` / `rawMatchAll`
+`rawMatchAny` and `rawMatchAll` allow you to craft exact substring patterns to match against Redis requests and responses.
 
 As the names imply:
 - `rawMatchAny` matches if at least one of its array members is found in a message
-- `rawMatchAll` matches only if every one of its array members is found in a message
+- `rawMatchAll` matches only if all of its array members is found in a message
 
 Keep in mind that Redis communicates using [RESP](https://redis.io/docs/latest/develop/reference/protocol-spec/), so if you want to match an exact command, you'll need to format it as a RESP snippet.
 
-For example, to match a `set` command, you could do something like: `*3\n$3\nset\n`, which will match any len-3 array whose first element is the exact command name `set`.
+For example, to match a `set` command, you could do something like: `*3\r\n$3\r\nset\r\n`, which will match any len-3 array whose first element is the exact command name `set`.
 
-#### "clientAddr"
-Limits the effect of a rule to a particular client, identifying the client by address. Applies as a prefix.
+#### `clientAddr`
+Limits the effect of a rule to a particular client. Matches against the client's address, operating as a prefix.
 
-#### "clientName"
-Limits the effect of a rule to a particular client by the value given to `CLIENT SETNAME`. Applies as an exact match. Rejects clients which have not set a client name.
+#### `clientName`
+Limits the effect of a rule to a particular client by the value given to `CLIENT SETNAME`. Applies as an exact match. Rejects clients with no client name value.
 
-#### "percentage"
+#### `percentage`
 Limits the effect of the rule to the approximate percentage of matched requests.
 
+#### `alwaysMatch`
+Forces the rule to always match, regardless of other match directives. Only evaluated once the `alwaysMatch` rule is reached in the prioritized list of rules. If you have another rule that matches first, `alwaysMatch` will not apply.
+
 ### Action directives
 
-#### "delay"
+#### `log`
+Logs the full rule as JSON, and logs the full matched message.
+
+#### `delay`
 Waits to proxy the message for the given number of milliseconds.
 
-## Request-only rule options
-
-### Action directives
-
-#### "returnEmpty"
+#### `returnEmpty`
 Returns an empty response. In RESP, this is represented by a null bulk string: `$-1\r\n` (read, bulk string of length -1).
 
-#### "returnErr"
+#### `returnErr`
 Returns an error with the value of `returnErr` as the message.
 
-#### "drop"
+#### `drop`
 Closes the client connection.
 
